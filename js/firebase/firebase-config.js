@@ -13,13 +13,13 @@
    ========================================================================= */
 
 const firebaseConfig = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
-  projectId: "YOUR_PROJECT_ID",
-  storageBucket: "YOUR_PROJECT_ID.appspot.com",
-  messagingSenderId: "YOUR_SENDER_ID",
-  appId: "YOUR_APP_ID"
-};
+     apiKey: "AIzaSyAKuPRdnSJnsoq2ucJvmV_Xwsq3NRd6XxA",
+     authDomain: "aptitude-payments-portal.firebaseapp.com",
+     projectId: "aptitude-payments-portal",
+     storageBucket: "aptitude-payments-portal.firebasestorage.app",
+     messagingSenderId: "1062636587903",
+     appId: "1:1062636587903:web:a509edb415893b5c56e84a"
+   };
 
 // Initialize Firebase (guard against double init when included on many pages)
 if (!firebase.apps.length) {
@@ -28,7 +28,6 @@ if (!firebase.apps.length) {
 
 const auth = firebase.auth();
 const db = firebase.firestore();
-const storage = firebase.storage();
 
 // Enable offline persistence where supported (best effort, ignore errors)
 db.enablePersistence({ synchronizeTabs: true }).catch(() => {
