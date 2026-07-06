@@ -15,6 +15,22 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
   renderShell("new-payment.html", "New Payment Request", "Submit a new payment for approval");
 
+  const outletSelect = document.getElementById("outlet");
+  const customOutletRow = document.getElementById("customOutletRow");
+  const customOutletInput = document.getElementById("customOutlet");
+
+  outletSelect.addEventListener("change", () => {
+    if (outletSelect.value === "Other") {
+      customOutletRow.classList.remove("d-none");
+      customOutletInput.setAttribute("required", "required");
+    } else {
+      customOutletRow.classList.add("d-none");
+      customOutletInput.removeAttribute("required");
+      customOutletInput.value = "";
+      customOutletInput.classList.remove("is-invalid");
+    }
+  });
+
   document.getElementById("cancelBtn").addEventListener("click", () => {
     window.location.href = "history.html";
   });
@@ -31,13 +47,21 @@ document.addEventListener("DOMContentLoaded", async () => {
   if (editId) await loadDraftForEdit(editId);
 });
 
+function getSelectedOutlet() {
+  const outletSelect = document.getElementById("outlet");
+  if (outletSelect.value === "Other") {
+    return document.getElementById("customOutlet").value.trim();
+  }
+  return outletSelect.value;
+}
+
 function collectFormData() {
   return {
     supplierName: document.getElementById("supplierName").value.trim(),
     supplierCode: document.getElementById("supplierCode").value.trim(),
     amount: parseFloat(document.getElementById("amount").value || 0),
     currency: document.getElementById("currency").value,
-    outlet: document.getElementById("outlet").value,
+    outlet: getSelectedOutlet(),
     purpose: document.getElementById("purpose").value.trim(),
     paymentType: document.getElementById("paymentType").value,
     invoiceNumber: document.getElementById("invoiceNumber").value.trim(),
@@ -65,6 +89,17 @@ function validateForm(targetStatus) {
         el.classList.remove("is-invalid");
       }
     });
+
+    const outletSelect = document.getElementById("outlet");
+    if (outletSelect.value === "Other") {
+      const customOutletInput = document.getElementById("customOutlet");
+      if (!customOutletInput.value.trim()) {
+        customOutletInput.classList.add("is-invalid");
+        valid = false;
+      } else {
+        customOutletInput.classList.remove("is-invalid");
+      }
+    }
   } else {
     const supplierEl = document.getElementById("supplierName");
     if (!supplierEl.value.trim()) {
@@ -166,7 +201,17 @@ async function loadDraftForEdit(docId) {
     document.getElementById("supplierCode").value = p.supplierCode || "";
     document.getElementById("amount").value = p.amount || "";
     document.getElementById("currency").value = p.currency || "AED";
-    document.getElementById("outlet").value = p.outlet || "";
+
+    const outletSelect = document.getElementById("outlet");
+    const knownOutlets = Array.from(outletSelect.options).map((o) => o.value);
+    if (p.outlet && !knownOutlets.includes(p.outlet)) {
+      outletSelect.value = "Other";
+      document.getElementById("customOutletRow").classList.remove("d-none");
+      document.getElementById("customOutlet").value = p.outlet;
+    } else {
+      outletSelect.value = p.outlet || "";
+    }
+
     document.getElementById("purpose").value = p.purpose || "";
     document.getElementById("paymentType").value = p.paymentType || "";
     document.getElementById("invoiceNumber").value = p.invoiceNumber || "";
