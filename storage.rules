@@ -1,0 +1,58 @@
+rules_version = '2';
+
+// =============================================================================
+// Aptitude Payment Approval Portal — Firebase Storage Security Rules
+// Attachments are stored under: payments/{paymentId}/{category}/{fileName}
+// =============================================================================
+
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function email() {
+      return request.auth.token.email.lower();
+    }
+
+    function isAccounts() {
+      return isSignedIn() && email() == 'accounts@aptitude.ae';
+    }
+
+    function isAdmin() {
+      return isSignedIn() && email() == 'admin@aptitude.ae';
+    }
+
+    function isOperations() {
+      return isSignedIn() && email() == 'operations@aptitude.ae';
+    }
+
+    function isApprover() {
+      return isAdmin() || isOperations();
+    }
+
+    function isAuthorizedUser() {
+      return isAccounts() || isApprover();
+    }
+
+    function isValidFile() {
+      return request.resource.size < 10 * 1024 * 1024 &&
+        request.resource.contentType.matches('application/pdf') ||
+        request.resource.contentType.matches('image/.*') ||
+        request.resource.contentType.matches('application/vnd.*') ||
+        request.resource.contentType.matches('application/msword');
+    }
+
+    match /payments/{paymentId}/{category}/{fileName} {
+      allow read: if isAuthorizedUser();
+      allow create: if isAuthorizedUser() &&
+        request.resource.size < 10 * 1024 * 1024;
+      allow delete: if isAdmin();
+    }
+
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

@@ -1,0 +1,24 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+*.swp
+
+# Firebase
+.firebase/
+.firebaserc
+firebase-debug.log
+firestore-debug.log
+ui-debug.log
+*.local
+
+# Node (only relevant if you add tooling later)
+node_modules/
+npm-debug.log*
+
+# Environment / secrets
+.env
+.env.local

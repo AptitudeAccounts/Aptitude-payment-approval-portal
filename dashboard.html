@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dashboard | Aptitude Payment Approval Portal</title>
+<link rel="icon" href="assets/images/favicon.svg" type="image/svg+xml">
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="app-shell">
+  <div id="shellSidebarSlot"></div>
+  <div class="main-wrap">
+    <div id="shellTopbarSlot"></div>
+
+    <div class="page-content">
+
+      <div class="row g-3 mb-4" id="kpiRow">
+        <!-- KPI cards injected by dashboard.js -->
+      </div>
+
+      <div class="row g-3 mb-4">
+        <div class="col-lg-8">
+          <div class="content-card h-100">
+            <div class="card-header-row">
+              <h5><i class="fa-solid fa-chart-line me-2 text-muted-soft"></i>Payment Trend (Last 6 Months)</h5>
+            </div>
+            <div class="chart-wrap"><canvas id="trendChart"></canvas></div>
+          </div>
+        </div>
+        <div class="col-lg-4">
+          <div class="content-card h-100">
+            <div class="card-header-row">
+              <h5><i class="fa-solid fa-chart-pie me-2 text-muted-soft"></i>By Status</h5>
+            </div>
+            <div class="chart-wrap"><canvas id="statusChart"></canvas></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="content-card">
+        <div class="card-header-row">
+          <h5 id="recentTableTitle"><i class="fa-solid fa-list me-2 text-muted-soft"></i>Recent Requests</h5>
+          <a href="history.html" class="btn btn-sm btn-outline-navy">View All <i class="fa-solid fa-arrow-right ms-1"></i></a>
+        </div>
+        <div class="table-responsive">
+          <table class="table-modern">
+            <thead>
+              <tr>
+                <th>Payment ID</th>
+                <th>Supplier</th>
+                <th>Outlet</th>
+                <th>Amount</th>
+                <th>Requested By</th>
+                <th>Payment Date</th>
+                <th>Status</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody id="recentPaymentsBody">
+              <tr><td colspan="8"><div class="skeleton skeleton-row"></div></td></tr>
+              <tr><td colspan="8"><div class="skeleton skeleton-row"></div></td></tr>
+              <tr><td colspan="8"><div class="skeleton skeleton-row"></div></td></tr>
+            </tbody>
+          </table>
+          <div class="empty-state d-none" id="recentEmptyState">
+            <i class="fa-regular fa-folder-open"></i>
+            <p>No payment requests yet.</p>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-storage-compat.js"></script>
+<script src="js/firebase/firebase-config.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script src="js/app.js"></script>
+<script src="js/dashboard.js"></script>
+</body>
+</html>
