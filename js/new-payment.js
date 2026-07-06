@@ -1,11 +1,10 @@
 /* =========================================================================
    new-payment.js
-   New Payment Request form: field validation, drag-and-drop attachments,
-   Save Draft and Submit for Approval workflows.
+   New Payment Request form: field validation, Save Draft and Submit for
+   Approval workflows. (Attachment uploads are disabled in this build —
+   Firebase Storage is not enabled on the free Spark plan.)
    ========================================================================= */
 
-let primaryFiles = [];
-let supportFiles = [];
 let editingPaymentDocId = null; // set when editing an existing Draft
 
 document.addEventListener("DOMContentLoaded", async () => {
@@ -15,9 +14,6 @@ document.addEventListener("DOMContentLoaded", async () => {
     return;
   }
   renderShell("new-payment.html", "New Payment Request", "Submit a new payment for approval");
-
-  setupDropZone("dropZonePrimary", "filePrimary", "filePrimaryChips", primaryFiles);
-  setupDropZone("dropZoneSupport", "fileSupport", "fileSupportChips", supportFiles);
 
   document.getElementById("cancelBtn").addEventListener("click", () => {
     window.location.href = "history.html";
@@ -34,50 +30,6 @@ document.addEventListener("DOMContentLoaded", async () => {
   const editId = params.get("edit");
   if (editId) await loadDraftForEdit(editId);
 });
-
-function setupDropZone(zoneId, inputId, chipsId, fileArray) {
-  const zone = document.getElementById(zoneId);
-  const input = document.getElementById(inputId);
-  const chipsBox = document.getElementById(chipsId);
-
-  zone.addEventListener("click", () => input.click());
-  zone.addEventListener("dragover", (e) => { e.preventDefault(); zone.classList.add("dragover"); });
-  zone.addEventListener("dragleave", () => zone.classList.remove("dragover"));
-  zone.addEventListener("drop", (e) => {
-    e.preventDefault();
-    zone.classList.remove("dragover");
-    handleFiles(e.dataTransfer.files, fileArray, chipsBox);
-  });
-  input.addEventListener("change", () => handleFiles(input.files, fileArray, chipsBox));
-
-  renderChips(fileArray, chipsBox);
-}
-
-function handleFiles(fileList, fileArray, chipsBox) {
-  Array.from(fileList).forEach((file) => {
-    const check = validateFile(file);
-    if (!check.valid) {
-      showToast("Invalid File", check.reason, "danger");
-      return;
-    }
-    fileArray.push(file);
-  });
-  renderChips(fileArray, chipsBox);
-}
-
-function renderChips(fileArray, chipsBox) {
-  chipsBox.innerHTML = fileArray.map((f, i) => `
-    <span class="file-chip">
-      <i class="fa-regular fa-file"></i> ${escapeHtml(f.name)}
-      <i class="fa-solid fa-xmark remove-file" data-index="${i}"></i>
-    </span>`).join("");
-  chipsBox.querySelectorAll(".remove-file").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      fileArray.splice(Number(btn.dataset.index), 1);
-      renderChips(fileArray, chipsBox);
-    });
-  });
-}
 
 function collectFormData() {
   return {
@@ -99,11 +51,9 @@ function collectFormData() {
 }
 
 function validateForm(targetStatus) {
-  const form = document.getElementById("paymentForm");
   let valid = true;
 
   if (targetStatus === "Submitted") {
-    // Full validation required before submitting for approval
     const required = ["supplierName", "supplierCode", "amount", "currency", "outlet",
       "purpose", "paymentType", "invoiceNumber", "invoiceDate", "requiredPaymentDate", "category"];
     required.forEach((id) => {
@@ -116,7 +66,6 @@ function validateForm(targetStatus) {
       }
     });
   } else {
-    // Draft only requires a supplier name at minimum
     const supplierEl = document.getElementById("supplierName");
     if (!supplierEl.value.trim()) {
       supplierEl.classList.add("is-invalid");
@@ -151,22 +100,11 @@ async function submitPayment(targetStatus) {
       docRef = db.collection("payments").doc();
     }
 
-    // Upload new attachments
-    const newAttachments = [];
-    for (const file of primaryFiles) {
-      if (file.uploaded) { newAttachments.push(file.uploaded); continue; }
-      newAttachments.push(await uploadAttachment(file, paymentId, "primary"));
-    }
-    for (const file of supportFiles) {
-      if (file.uploaded) { newAttachments.push(file.uploaded); continue; }
-      newAttachments.push(await uploadAttachment(file, paymentId, "supporting"));
-    }
-
     const payload = {
       paymentId,
       ...data,
       status: targetStatus === "Submitted" ? "Pending Approval" : "Draft",
-      attachments: newAttachments,
+      attachments: [],
       requestedBy: { uid: CURRENT_USER.uid, name: CURRENT_USER.name, email: CURRENT_USER.email },
       updatedAt: firebase.firestore.FieldValue.serverTimestamp()
     };
@@ -238,14 +176,6 @@ async function loadDraftForEdit(docId) {
     document.getElementById("category").value = p.category || "";
     document.getElementById("description").value = p.description || "";
     document.getElementById("remarks").value = p.remarks || "";
-
-    (p.attachments || []).forEach((a) => {
-      const fakeFile = { name: a.name, uploaded: a };
-      if (a.category === "primary") primaryFiles.push(fakeFile);
-      else supportFiles.push(fakeFile);
-    });
-    renderChips(primaryFiles, document.getElementById("filePrimaryChips"));
-    renderChips(supportFiles, document.getElementById("fileSupportChips"));
 
     hideSpinner();
   } catch (err) {
