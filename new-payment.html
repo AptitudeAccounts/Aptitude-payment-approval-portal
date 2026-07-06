@@ -65,13 +65,23 @@
               <label class="form-label">Outlet <span class="text-danger">*</span></label>
               <select class="form-select" id="outlet" required>
                 <option value="">Select outlet</option>
-                <option>Head Office</option>
-                <option>Abu Dhabi Branch</option>
-                <option>Dubai Branch</option>
-                <option>Sharjah Branch</option>
-                <option>Warehouse</option>
+                <option>Louvre</option>
+                <option>ARC</option>
+                <option>S45 Khalidya</option>
+                <option>DGE</option>
+                <option>Al Qana</option>
+                <option>Al Nahyan</option>
+                <option value="Other">Other (type new outlet)</option>
               </select>
               <div class="invalid-feedback">Please select an outlet.</div>
+            </div>
+          </div>
+
+          <div class="row g-3 d-none" id="customOutletRow">
+            <div class="col-md-4">
+              <label class="form-label">New Outlet Name <span class="text-danger">*</span></label>
+              <input type="text" class="form-control" id="customOutlet" maxlength="80" placeholder="Type the new outlet or shop name">
+              <div class="invalid-feedback">Please type the new outlet name.</div>
             </div>
           </div>
 
