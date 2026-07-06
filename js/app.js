@@ -391,28 +391,3 @@ async function createNotification(type, message, recipientRole) {
     createdAt: firebase.firestore.FieldValue.serverTimestamp()
   });
 }
-
-/* =========================================================================
-   File upload helper (Firebase Storage)
-   ========================================================================= */
-async function uploadAttachment(file, paymentId, category) {
-  const path = `payments/${paymentId}/${category}/${Date.now()}_${file.name}`;
-  const ref = storage.ref().child(path);
-  const snapshot = await ref.put(file);
-  const url = await snapshot.ref.getDownloadURL();
-  return { name: file.name, url, category, size: file.size, type: file.type, path };
-}
-
-function validateFile(file) {
-  const allowedTypes = ["application/pdf", "image/png", "image/jpeg", "image/jpg", "application/vnd.ms-excel",
-    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    "application/msword", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"];
-  const maxSize = 10 * 1024 * 1024; // 10 MB
-  if (!allowedTypes.includes(file.type)) {
-    return { valid: false, reason: `"${file.name}" has an unsupported file type.` };
-  }
-  if (file.size > maxSize) {
-    return { valid: false, reason: `"${file.name}" exceeds the 10MB size limit.` };
-  }
-  return { valid: true };
-}
