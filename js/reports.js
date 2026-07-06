@@ -141,8 +141,7 @@ function renderMonthlyChart() {
 }
 
 function renderOutletChart() {
-  const outlets = ["Head Office", "Abu Dhabi Branch", "Dubai Branch", "Sharjah Branch", "Warehouse"];
-  const data = outlets.map((o) => reportFiltered.filter((p) => p.outlet === o).reduce((s, p) => s + Number(p.amount || 0), 0));
+     const outlets = ["Louvre", "ARC", "S45 Khalidya", "DGE", "Al Qana", "Al Nahyan"];  const data = outlets.map((o) => reportFiltered.filter((p) => p.outlet === o).reduce((s, p) => s + Number(p.amount || 0), 0));
   destroyChart("outlet");
   chartInstances.outlet = new Chart(document.getElementById("outletChart"), {
     type: "bar",
