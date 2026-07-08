@@ -40,7 +40,7 @@ async function loadSettings() {
   try {
     const doc = await db.collection("settings").doc("general").get();
     const data = doc.exists ? doc.data() : {};
-    settingsData.outlets = data.outlets || ["Head Office", "Abu Dhabi Branch", "Dubai Branch", "Sharjah Branch", "Warehouse"];
+    settingsData.outlets = data.outlets || ["Louvre", "ARC", "S45 Khalidya", "DGE", "Al Qana", "Al Nahyan"];
     settingsData.categories = data.categories || ["Expense", "Inventory", "Utility", "Salary", "Maintenance", "Tax", "Other"];
     settingsData.paymentTypes = data.paymentTypes || ["Cash", "Bank", "Cheque"];
 
@@ -104,9 +104,13 @@ async function saveGeneralSettings() {
   }
 }
 
+function supplierDocIdSettings(name) {
+  return name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") || "supplier";
+}
+
 async function loadSuppliers() {
   try {
-    const snap = await db.collection("suppliers").orderBy("name").get();
+    const snap = await db.collection("suppliers").orderBy("name").limit(50).get();
     const body = document.getElementById("suppliersTableBody");
     if (snap.empty) {
       body.innerHTML = `<tr><td colspan="4" class="text-center text-muted-soft py-4">No suppliers added yet.</td></tr>`;
@@ -139,7 +143,14 @@ async function saveSupplier() {
   }
   showSpinner("Adding supplier...");
   try {
-    await db.collection("suppliers").add({ name, code, contact, createdAt: firebase.firestore.FieldValue.serverTimestamp() });
+    const id = supplierDocIdSettings(name);
+    await db.collection("suppliers").doc(id).set({
+      name,
+      nameLower: name.toLowerCase(),
+      code,
+      contact,
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    }, { merge: true });
     hideSpinner();
     bootstrap.Modal.getInstance(document.getElementById("supplierAddModal")).hide();
     document.getElementById("newSupplierName").value = "";
