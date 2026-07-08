@@ -16,6 +16,7 @@ const STATUS_CLASS = {
   "On Hold": "status-hold",
   "Paid": "status-paid"
 };
+
 const NAV_ITEMS = {
   "Accounts": [
     { section: "Main" },
@@ -48,7 +49,8 @@ const NAV_ITEMS = {
     { href: "reports.html", icon: "fa-chart-column", label: "Reports" }
   ]
 };
-c/* =========================================================================
+
+/* =========================================================================
    Spinner
    ========================================================================= */
 function showSpinner(message) {
