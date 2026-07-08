@@ -16,7 +16,6 @@ const STATUS_CLASS = {
   "On Hold": "status-hold",
   "Paid": "status-paid"
 };
-
 const NAV_ITEMS = {
   "Accounts": [
     { section: "Main" },
@@ -24,6 +23,7 @@ const NAV_ITEMS = {
     { href: "new-payment.html", icon: "fa-circle-plus", label: "New Payment" },
     { href: "history.html", icon: "fa-clock-rotate-left", label: "My Requests" },
     { section: "Insights" },
+    { href: "suppliers.html", icon: "fa-building", label: "Suppliers" },
     { href: "reports.html", icon: "fa-chart-column", label: "Reports" }
   ],
   "Administrator": [
@@ -32,6 +32,7 @@ const NAV_ITEMS = {
     { href: "approval.html", icon: "fa-stamp", label: "Approvals" },
     { href: "history.html", icon: "fa-clock-rotate-left", label: "All Requests" },
     { section: "Insights" },
+    { href: "suppliers.html", icon: "fa-building", label: "Suppliers" },
     { href: "reports.html", icon: "fa-chart-column", label: "Reports" },
     { section: "Administration" },
     { href: "settings.html", icon: "fa-sliders", label: "Settings" },
@@ -43,11 +44,11 @@ const NAV_ITEMS = {
     { href: "approval.html", icon: "fa-stamp", label: "Approvals" },
     { href: "history.html", icon: "fa-clock-rotate-left", label: "All Requests" },
     { section: "Insights" },
+    { href: "suppliers.html", icon: "fa-building", label: "Suppliers" },
     { href: "reports.html", icon: "fa-chart-column", label: "Reports" }
   ]
 };
-
-/* =========================================================================
+c/* =========================================================================
    Spinner
    ========================================================================= */
 function showSpinner(message) {
