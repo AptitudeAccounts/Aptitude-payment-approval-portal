@@ -1,11 +1,15 @@
 /* =========================================================================
    new-payment.js
-   New Payment Request form: field validation, Save Draft and Submit for
-   Approval workflows. (Attachment uploads are disabled in this build —
-   Firebase Storage is not enabled on the free Spark plan.)
+   New Payment Request form: field validation, live supplier search
+   (scales to very large supplier lists — never preloads everything),
+   auto-save to the permanent supplier directory, Save Draft and Submit
+   for Approval workflows. (Attachment uploads are disabled — Firebase
+   Storage is not enabled on the free Spark plan.)
    ========================================================================= */
 
 let editingPaymentDocId = null; // set when editing an existing Draft
+let supplierPickedFromList = false;
+let supplierSearchTimer = null;
 
 document.addEventListener("DOMContentLoaded", async () => {
   try {
@@ -31,6 +35,8 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
   });
 
+  setupSupplierAutocomplete();
+
   document.getElementById("cancelBtn").addEventListener("click", () => {
     window.location.href = "history.html";
   });
@@ -46,6 +52,67 @@ document.addEventListener("DOMContentLoaded", async () => {
   const editId = params.get("edit");
   if (editId) await loadDraftForEdit(editId);
 });
+
+/* =========================================================================
+   Supplier live search — queries Firestore as the user types instead of
+   loading the whole supplier collection, so it stays fast even with
+   100,000+ suppliers.
+   ========================================================================= */
+function setupSupplierAutocomplete() {
+  const nameInput = document.getElementById("supplierName");
+  const codeInput = document.getElementById("supplierCode");
+  const hint = document.getElementById("supplierHint");
+  const datalist = document.getElementById("supplierNameList");
+
+  nameInput.addEventListener("input", () => {
+    supplierPickedFromList = false;
+    const term = nameInput.value.trim();
+    clearTimeout(supplierSearchTimer);
+
+    if (!term) {
+      datalist.innerHTML = "";
+      hint.textContent = "";
+      hint.classList.remove("text-success");
+      return;
+    }
+
+    supplierSearchTimer = setTimeout(async () => {
+      try {
+        const termLower = term.toLowerCase();
+        const snap = await db.collection("suppliers")
+          .where("nameLower", ">=", termLower)
+          .where("nameLower", "<=", termLower + "\uf8ff")
+          .orderBy("nameLower")
+          .limit(8)
+          .get();
+
+        let exactMatch = null;
+        let optionsHtml = "";
+        snap.forEach((doc) => {
+          const s = doc.data();
+          optionsHtml += `<option value="${escapeHtml(s.name)}"></option>`;
+          if (s.name.trim().toLowerCase() === termLower) exactMatch = s;
+        });
+        datalist.innerHTML = optionsHtml;
+
+        if (exactMatch) {
+          codeInput.value = exactMatch.code || "";
+          hint.textContent = "Existing supplier — code auto-filled.";
+          hint.classList.add("text-success");
+          supplierPickedFromList = true;
+        } else if (snap.empty) {
+          hint.textContent = "New supplier — it will be saved for future use.";
+          hint.classList.remove("text-success");
+        } else {
+          hint.textContent = "Similar suppliers found below — select one, or keep typing to add new.";
+          hint.classList.remove("text-success");
+        }
+      } catch (err) {
+        console.error("Supplier search error:", err);
+      }
+    }, 300);
+  });
+}
 
 function getSelectedOutlet() {
   const outletSelect = document.getElementById("outlet");
@@ -110,6 +177,26 @@ function validateForm(targetStatus) {
   return valid;
 }
 
+function supplierDocId(name) {
+  return name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") || "supplier";
+}
+
+async function saveSupplierToDirectory(name, code) {
+  if (!name) return;
+  try {
+    const id = supplierDocId(name);
+    await db.collection("suppliers").doc(id).set({
+      name: name.trim(),
+      nameLower: name.trim().toLowerCase(),
+      code: code ? code.trim() : "",
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    }, { merge: true });
+  } catch (err) {
+    console.error("Could not save supplier to directory:", err);
+    // Non-fatal: the payment itself still saves even if this fails
+  }
+}
+
 async function submitPayment(targetStatus) {
   if (!validateForm(targetStatus)) {
     showToast("Missing Information", "Please complete all required fields highlighted in red.", "warning");
@@ -165,6 +252,9 @@ async function submitPayment(targetStatus) {
       }];
       await docRef.set(payload);
     }
+
+    // Save/update this supplier in the permanent directory for future autocomplete
+    await saveSupplierToDirectory(data.supplierName, data.supplierCode);
 
     if (targetStatus === "Submitted") {
       await createNotification("New Request", `New payment request ${paymentId} submitted by ${CURRENT_USER.name}.`, "Administrator");
