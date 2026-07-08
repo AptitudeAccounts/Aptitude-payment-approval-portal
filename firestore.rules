@@ -98,9 +98,10 @@ service cloud.firestore {
     // suppliers
     // ---------------------------------------------------------------------
     match /suppliers/{supplierId} {
-      allow read: if isAuthorizedUser();
-      allow write: if isAdmin();
-    }
+         allow read: if isAuthorizedUser();
+         allow create, update: if isAuthorizedUser();
+         allow delete: if isAdmin();
+       }
 
     // Deny everything else by default
     match /{document=**} {
