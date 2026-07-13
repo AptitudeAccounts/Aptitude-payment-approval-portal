@@ -1,0 +1,167 @@
+// Payment Approval Portal — Database Schema
+// Run: npx prisma migrate dev --name init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  FINANCE
+  MANAGER
+  ADMIN
+}
+
+enum RequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  HOLD
+  CANCELLED
+}
+
+enum Decision {
+  APPROVE
+  REJECT
+  HOLD
+}
+
+model User {
+  id            String   @id @default(cuid())
+  name          String
+  email         String   @unique
+  passwordHash  String
+  role          Role     @default(MANAGER)
+  mfaSecret     String?
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+
+  requestsCreated   PaymentRequest[]  @relation("CreatedBy")
+  approvalActions   ApprovalAction[]
+  auditLogs         AuditLog[]
+  assignedApprovals RequestApprover[]
+}
+
+model Outlet {
+  id       String            @id @default(cuid())
+  name     String            @unique
+  requests PaymentRequest[]
+}
+
+model Supplier {
+  id       String            @id @default(cuid())
+  name     String            @unique
+  requests PaymentRequest[]
+}
+
+model PaymentRequest {
+  id              String        @id @default(cuid())
+  requestNumber   String        @unique // e.g. PR-2026-000123
+  supplierId      String
+  supplier        Supplier      @relation(fields: [supplierId], references: [id])
+  outletId        String
+  outlet          Outlet        @relation(fields: [outletId], references: [id])
+  invoiceNumber   String
+  serviceOrGoods  String
+  invoiceAmount   Decimal       @db.Decimal(14, 2)
+  paymentAmount   Decimal       @db.Decimal(14, 2)
+  currency        String        @default("AED")
+  reason          String
+  isBatch         Boolean       @default(false)
+  status          RequestStatus @default(PENDING)
+  deletionRequested Boolean     @default(false)
+  createdById     String
+  createdBy       User          @relation("CreatedBy", fields: [createdById], references: [id])
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  lines           PaymentRequestLine[]
+  attachments     Attachment[]
+  approvalLinks   ApprovalLink[]
+  approvalActions ApprovalAction[]
+  approvers       RequestApprover[]
+}
+
+// For batch requests: one line per supplier/item within the batch
+model PaymentRequestLine {
+  id               String         @id @default(cuid())
+  paymentRequestId String
+  paymentRequest   PaymentRequest @relation(fields: [paymentRequestId], references: [id])
+  supplierName     String
+  invoiceNumber    String
+  invoiceAmount    Decimal        @db.Decimal(14, 2)
+  paymentAmount    Decimal        @db.Decimal(14, 2)
+}
+
+model RequestApprover {
+  id               String         @id @default(cuid())
+  paymentRequestId String
+  paymentRequest   PaymentRequest @relation(fields: [paymentRequestId], references: [id])
+  userId           String
+  user             User           @relation(fields: [userId], references: [id])
+
+  @@unique([paymentRequestId, userId])
+}
+
+model Attachment {
+  id               String         @id @default(cuid())
+  paymentRequestId String
+  paymentRequest   PaymentRequest @relation(fields: [paymentRequestId], references: [id])
+  fileName         String
+  storageUrl       String
+  mimeType         String
+  uploadedAt       DateTime       @default(now())
+}
+
+// Secure, single-use-per-decision approval link
+model ApprovalLink {
+  id               String         @id @default(cuid())
+  paymentRequestId String
+  paymentRequest   PaymentRequest @relation(fields: [paymentRequestId], references: [id])
+  tokenHash        String         @unique // sha256 of the raw token; raw token is never stored
+  expiresAt        DateTime
+  createdAt        DateTime       @default(now())
+  consumedAt       DateTime?
+}
+
+model ApprovalAction {
+  id               String         @id @default(cuid())
+  paymentRequestId String
+  paymentRequest   PaymentRequest @relation(fields: [paymentRequestId], references: [id])
+  approverId       String
+  approver         User           @relation(fields: [approverId], references: [id])
+  decision         Decision
+  remarks          String?
+  ipAddress        String
+  userAgent        String
+  device           String?
+  browser          String?
+  decidedAt        DateTime       @default(now())
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  userId     String?
+  user       User?    @relation(fields: [userId], references: [id])
+  action     String   // e.g. "LOGIN", "REQUEST_CREATED", "APPROVAL_LINK_GENERATED", "DECISION_APPROVE"
+  entityType String?  // e.g. "PaymentRequest"
+  entityId   String?
+  ipAddress  String?
+  userAgent  String?
+  metadata   Json?
+  createdAt  DateTime @default(now())
+}
+
+model NotificationLog {
+  id           String   @id @default(cuid())
+  channel      String   // "EMAIL" | "WHATSAPP"
+  toAddress    String
+  event        String   // "SUBMITTED" | "APPROVED" | "REJECTED" | "HOLD"
+  status       String   // "SENT" | "FAILED"
+  providerId   String?
+  createdAt    DateTime @default(now())
+}
