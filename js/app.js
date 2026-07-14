@@ -171,6 +171,20 @@ async function generatePaymentId() {
   return `PAY-${year}-${String(newValue).padStart(6, "0")}`;
 }
 
+/* Generates the next sequential supplier code, e.g. 0023, continuing from
+   whatever number is stored in counters/supplier-code */
+async function generateSupplierCode() {
+  const counterRef = db.collection("counters").doc("supplier-code");
+  const newValue = await db.runTransaction(async (tx) => {
+    const doc = await tx.get(counterRef);
+    const current = doc.exists ? doc.data().value : 0;
+    const next = current + 1;
+    tx.set(counterRef, { value: next }, { merge: true });
+    return next;
+  });
+  return String(newValue).padStart(4, "0");
+}
+
 /* =========================================================================
    Auth guard — every protected page calls requireAuth(["Role1","Role2"])
    ========================================================================= */
