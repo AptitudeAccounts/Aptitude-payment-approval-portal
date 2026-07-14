@@ -2,7 +2,8 @@
    history.js
    Full payment history / "My Requests" table: search, filter, sort,
    pagination, and export. Accounts users see only their own requests;
-   Admin & Operations Manager see everyone's.
+   Admin & Operations Manager see everyone's. Accounts can edit/delete
+   their own payment while it is Draft or Pending Approval.
    ========================================================================= */
 
 let allPayments = [];
@@ -131,8 +132,9 @@ function renderTable() {
         <td>${statusBadge(p.status)}</td>
         <td>
           <a href="payment-details.html?id=${p.id}" class="btn-icon-action" title="View"><i class="fa-regular fa-eye"></i></a>
-          ${p.status === "Draft" && p.requestedBy && p.requestedBy.uid === CURRENT_USER.uid ?
-            `<a href="new-payment.html?edit=${p.id}" class="btn-icon-action" title="Edit"><i class="fa-solid fa-pen"></i></a>` : ""}
+          ${["Draft", "Pending Approval"].includes(p.status) && p.requestedBy && p.requestedBy.uid === CURRENT_USER.uid ?
+            `<a href="new-payment.html?edit=${p.id}" class="btn-icon-action" title="Edit"><i class="fa-solid fa-pen"></i></a>
+             <button class="btn-icon-action reject" title="Delete" onclick="quickDeletePayment('${p.id}')"><i class="fa-solid fa-trash"></i></button>` : ""}
         </td>
       </tr>`).join("");
   }
@@ -155,4 +157,17 @@ function renderPagination(totalPages) {
       renderTable();
     });
   });
+}
+
+async function quickDeletePayment(docId) {
+  if (!confirm("Delete this payment request permanently? This cannot be undone.")) return;
+  try {
+    await db.collection("payments").doc(docId).delete();
+    showToast("Deleted", "Payment request deleted.", "success");
+    allPayments = allPayments.filter((p) => p.id !== docId);
+    applyFilters();
+  } catch (err) {
+    console.error(err);
+    showToast("Error", "Could not delete: " + err.message, "danger");
+  }
 }
