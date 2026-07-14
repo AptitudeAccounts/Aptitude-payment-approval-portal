@@ -33,6 +33,7 @@ const TIMELINE_ICONS = {
   "Draft Created": { icon: "fa-file", color: "#8E9BB8" },
   "Draft Updated": { icon: "fa-pen", color: "#8E9BB8" },
   "Submitted": { icon: "fa-paper-plane", color: "#2E6FE0" },
+  "Updated & Resubmitted": { icon: "fa-arrows-rotate", color: "#2E6FE0" },
   "Approved": { icon: "fa-check", color: "#1E8E5A" },
   "Rejected": { icon: "fa-xmark", color: "#C0392B" },
   "On Hold": { icon: "fa-hand", color: "#7B41C9" },
@@ -96,13 +97,13 @@ async function loadPaymentDetails(docId) {
       attachBox.innerHTML = `<div class="empty-state"><i class="fa-regular fa-folder-open"></i><p>No attachments uploaded.</p></div>`;
     } else {
       attachBox.innerHTML = attachments.map((a) => `
-        <a href="${a.url}" target="_blank" rel="noopener" class="d-flex align-items-center gap-3 p-2 rounded-3 text-decoration-none mb-2" style="background:var(--bg-app);">
+        <a href="${a.dataUrl || a.url}" download="${escapeHtml(a.name)}" class="d-flex align-items-center gap-3 p-2 rounded-3 text-decoration-none mb-2" style="background:var(--bg-app);">
           <div class="bg-soft-navy" style="width:38px;height:38px;border-radius:10px;display:flex;align-items:center;justify-content:center;">
             <i class="fa-regular fa-file-lines"></i>
           </div>
           <div class="flex-fill">
             <div class="small fw-semibold text-dark">${escapeHtml(a.name)}</div>
-            <div class="small text-muted-soft">${a.category === "primary" ? "Invoice / Quotation / PO" : "Supporting Document"}</div>
+            <div class="small text-muted-soft">${a.size ? Math.round(a.size / 1024) + " KB" : ""}</div>
           </div>
           <i class="fa-solid fa-download text-muted-soft"></i>
         </a>`).join("");
