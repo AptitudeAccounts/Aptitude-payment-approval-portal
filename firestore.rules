@@ -48,62 +48,52 @@ service cloud.firestore {
       allow read: if isAuthorizedUser() &&
         (isApprover() || resource.data.requestedBy.uid == request.auth.uid);
 
-      // Accounts can create their own requests
       allow create: if isAccounts() &&
         request.resource.data.requestedBy.uid == request.auth.uid &&
         request.resource.data.status in ['Draft', 'Pending Approval'];
 
-      // Accounts can update their OWN request only while it is still a Draft
-      // or when submitting it (Draft -> Pending Approval).
+      // Accounts can update their OWN request while it is still Draft or
+      // Pending Approval (i.e. before an approver has actioned it).
       allow update: if isAccounts() &&
         resource.data.requestedBy.uid == request.auth.uid &&
-        resource.data.status == 'Draft' &&
+        resource.data.status in ['Draft', 'Pending Approval'] &&
         request.resource.data.status in ['Draft', 'Pending Approval'];
 
-      // Admin / Operations can update status, remarks and approval history
-      // on any request (approve / reject / hold / mark paid).
+      // Admin / Operations can transition status (approve / reject / hold / mark paid).
       allow update: if isApprover() &&
         request.resource.data.status in
           ['Pending Approval', 'Approved', 'Rejected', 'On Hold', 'Paid'];
 
-      allow delete: if isAdmin();
+      // Accounts can delete their OWN request while Draft or Pending Approval.
+      // Admin can delete any request.
+      allow delete: if isAdmin() ||
+        (isAccounts() &&
+          resource.data.requestedBy.uid == request.auth.uid &&
+          resource.data.status in ['Draft', 'Pending Approval']);
     }
 
-    // ---------------------------------------------------------------------
-    // counters (used to generate sequential, human-readable payment IDs)
-    // ---------------------------------------------------------------------
     match /counters/{counterId} {
       allow read, write: if isAuthorizedUser();
     }
 
-    // ---------------------------------------------------------------------
-    // notifications
-    // ---------------------------------------------------------------------
     match /notifications/{notificationId} {
       allow read: if isAuthorizedUser();
       allow create: if isAuthorizedUser();
-      allow update: if isAuthorizedUser(); // marking notifications as read
+      allow update: if isAuthorizedUser();
       allow delete: if isAdmin();
     }
 
-    // ---------------------------------------------------------------------
-    // settings (company profile, outlets, categories, payment types)
-    // ---------------------------------------------------------------------
     match /settings/{docId} {
       allow read: if isAuthorizedUser();
       allow write: if isAdmin();
     }
 
-    // ---------------------------------------------------------------------
-    // suppliers
-    // ---------------------------------------------------------------------
     match /suppliers/{supplierId} {
-         allow read: if isAuthorizedUser();
-         allow create, update: if isAuthorizedUser();
-         allow delete: if isAdmin();
-       }
+      allow read: if isAuthorizedUser();
+      allow create, update: if isAuthorizedUser();
+      allow delete: if isAdmin();
+    }
 
-    // Deny everything else by default
     match /{document=**} {
       allow read, write: if false;
     }
