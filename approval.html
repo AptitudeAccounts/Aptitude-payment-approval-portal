@@ -1,104 +1,170 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Approvals | Aptitude Payment Approval Portal</title>
-<link rel="icon" href="assets/images/favicon.svg" type="image/svg+xml">
-<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" rel="stylesheet">
-<link href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/style.css">
-</head>
-<body>
-<div class="app-shell">
-  <div id="shellSidebarSlot"></div>
-  <div class="main-wrap">
-    <div id="shellTopbarSlot"></div>
+/* =========================================================================
+   approval.js
+   Approvals screen for Admin & Operations Manager roles: status tabs,
+   table with view/approve/hold/reject/mark-paid/print actions, and a
+   remarks-required modal workflow that appends a full audit trail entry
+   to each payment.
+   ========================================================================= */
 
-    <div class="page-content">
+let currentStatusFilter = "Pending Approval";
+let currentPaymentsCache = [];
+let pendingAction = null; // { docId, targetStatus, label }
 
-      <ul class="nav nav-pills mb-3" id="statusTabs">
-        <li class="nav-item"><a class="nav-link active" data-status="Pending Approval" href="#">Pending Approvals</a></li>
-        <li class="nav-item"><a class="nav-link" data-status="On Hold" href="#">Held</a></li>
-        <li class="nav-item"><a class="nav-link" data-status="Approved" href="#">Approved</a></li>
-        <li class="nav-item"><a class="nav-link" data-status="Rejected" href="#">Rejected</a></li>
-      </ul>
+document.addEventListener("DOMContentLoaded", async () => {
+  try {
+    await requireAuth(["Administrator", "Operations Manager"]);
+  } catch (e) {
+    return;
+  }
+  renderShell("approval.html", "Approvals", "Review, approve, hold, reject, or mark payments as paid");
 
-      <div class="content-card">
-        <div class="card-header-row">
-          <h5><i class="fa-solid fa-stamp me-2 text-muted-soft"></i><span id="tableTitle">Pending Approvals</span></h5>
-          <div class="d-flex gap-2">
-            <button class="btn btn-sm btn-outline-navy" id="exportPdfBtn"><i class="fa-regular fa-file-pdf me-1"></i>Export PDF</button>
-            <button class="btn btn-sm btn-outline-navy" id="exportExcelBtn"><i class="fa-regular fa-file-excel me-1"></i>Export Excel</button>
-          </div>
-        </div>
-        <div class="table-responsive">
-          <table class="table-modern">
-            <thead>
-              <tr>
-                <th>Payment ID</th>
-                <th>Supplier</th>
-                <th>Outlet</th>
-                <th>Amount</th>
-                <th>Requested By</th>
-                <th>Payment Date</th>
-                <th>Priority</th>
-                <th>Status</th>
-                <th>Action</th>
-              </tr>
-            </thead>
-            <tbody id="approvalTableBody">
-              <tr><td colspan="9"><div class="skeleton skeleton-row"></div></td></tr>
-              <tr><td colspan="9"><div class="skeleton skeleton-row"></div></td></tr>
-              <tr><td colspan="9"><div class="skeleton skeleton-row"></div></td></tr>
-            </tbody>
-          </table>
-          <div class="empty-state d-none" id="approvalEmptyState">
-            <i class="fa-regular fa-circle-check"></i>
-            <p>Nothing here right now.</p>
-          </div>
-        </div>
-      </div>
+  document.querySelectorAll("#statusTabs .nav-link").forEach((tab) => {
+    tab.addEventListener("click", (e) => {
+      e.preventDefault();
+      document.querySelectorAll("#statusTabs .nav-link").forEach((t) => t.classList.remove("active"));
+      tab.classList.add("active");
+      currentStatusFilter = tab.dataset.status;
+      document.getElementById("tableTitle").textContent = tab.textContent;
+      loadApprovalTable();
+    });
+  });
 
-    </div>
-  </div>
-</div>
+  document.getElementById("exportPdfBtn").addEventListener("click", () => {
+    exportPaymentListPdf(currentPaymentsCache, `${currentStatusFilter} Payments`);
+  });
+  document.getElementById("exportExcelBtn").addEventListener("click", () => {
+    exportPaymentsExcel(currentPaymentsCache, `${currentStatusFilter}-payments`);
+  });
 
-<!-- Approve / Reject / Hold Modal -->
-<div class="modal fade" id="actionModal" tabindex="-1">
-  <div class="modal-dialog">
-    <div class="modal-content rounded-xl">
-      <div class="modal-header border-0">
-        <h5 class="modal-title" id="actionModalTitle">Approve Payment</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-      </div>
-      <div class="modal-body">
-        <p class="text-muted-soft small mb-3">Payment ID: <b class="mono-id" id="actionModalPaymentId"></b></p>
-        <label class="form-label" id="actionModalLabel">Remarks <span class="text-danger">*</span></label>
-        <textarea class="form-control" id="actionRemarks" rows="4" placeholder="Enter your remarks..."></textarea>
-        <div class="invalid-feedback d-block d-none" id="actionRemarksError">Remarks are required.</div>
-      </div>
-      <div class="modal-footer border-0">
-        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
-        <button type="button" class="btn" id="actionConfirmBtn">Confirm</button>
-      </div>
-    </div>
-  </div>
-</div>
+  document.getElementById("actionConfirmBtn").addEventListener("click", confirmAction);
 
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-storage-compat.js"></script>
-<script src="js/firebase/firebase-config.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<script src="js/app.js"></script>
-<script src="js/pdf-export.js"></script>
-<script src="js/excel-export.js"></script>
-<script src="js/approval.js"></script>
-</body>
-</html>
+  loadApprovalTable();
+});
+
+async function loadApprovalTable() {
+  const body = document.getElementById("approvalTableBody");
+  const emptyState = document.getElementById("approvalEmptyState");
+  body.innerHTML = `<tr><td colspan="9"><div class="skeleton skeleton-row"></div></td></tr>`.repeat(3);
+  emptyState.classList.add("d-none");
+
+  try {
+    const snap = await db.collection("payments").where("status", "==", currentStatusFilter).get();
+    const list = [];
+    snap.forEach((doc) => list.push({ id: doc.id, ...doc.data() }));
+    list.sort((a, b) => (b.createdAt ? b.createdAt.toDate() : 0) - (a.createdAt ? a.createdAt.toDate() : 0));
+    currentPaymentsCache = list;
+
+    if (!list.length) {
+      body.innerHTML = "";
+      emptyState.classList.remove("d-none");
+      return;
+    }
+
+    body.innerHTML = list.map((p) => `
+      <tr>
+        <td class="mono-id">${p.paymentId}</td>
+        <td>${escapeHtml(p.supplierName)}</td>
+        <td>${escapeHtml(p.outlet)}</td>
+        <td>${formatCurrency(p.amount, p.currency)}</td>
+        <td>${escapeHtml(p.requestedBy ? p.requestedBy.name : "-")}</td>
+        <td>${formatDate(p.requiredPaymentDate)}</td>
+        <td>${priorityBadge(p.priority)}</td>
+        <td>${statusBadge(p.status)}</td>
+        <td>
+          <a href="payment-details.html?id=${p.id}" class="btn-icon-action" title="View"><i class="fa-regular fa-eye"></i></a>
+          ${currentStatusFilter === "Pending Approval" || currentStatusFilter === "On Hold" ? `
+          <button class="btn-icon-action approve" title="Approve" onclick="openActionModal('${p.id}','${p.paymentId}','Approved')"><i class="fa-solid fa-check"></i></button>
+          <button class="btn-icon-action hold" title="Hold" onclick="openActionModal('${p.id}','${p.paymentId}','On Hold')"><i class="fa-solid fa-hand"></i></button>
+          <button class="btn-icon-action reject" title="Reject" onclick="openActionModal('${p.id}','${p.paymentId}','Rejected')"><i class="fa-solid fa-xmark"></i></button>
+          ` : ""}
+          ${currentStatusFilter === "Approved" ? `
+          <button class="btn-icon-action approve" title="Mark as Paid" onclick="openActionModal('${p.id}','${p.paymentId}','Paid')"><i class="fa-solid fa-sack-dollar"></i></button>
+          ` : ""}
+          <button class="btn-icon-action" title="Print" onclick='exportPaymentDetailPdf(${JSON.stringify(p).replace(/'/g, "&#39;")})'><i class="fa-solid fa-print"></i></button>
+        </td>
+      </tr>`).join("");
+  } catch (err) {
+    console.error(err);
+    showToast("Error", "Could not load approvals: " + err.message, "danger");
+  }
+}
+
+function openActionModal(docId, paymentId, targetStatus) {
+  pendingAction = { docId, targetStatus };
+  const titles = { "Approved": "Approve Payment", "Rejected": "Reject Payment", "On Hold": "Hold Payment", "Paid": "Mark as Paid" };
+  const labels = { "Approved": "Approval Remarks", "Rejected": "Rejection Reason", "On Hold": "Hold Remarks", "Paid": "Payment Remarks" };
+  const btnClass = { "Approved": "btn-teal", "Rejected": "btn-danger", "On Hold": "btn-navy", "Paid": "btn-teal" };
+
+  document.getElementById("actionModalTitle").textContent = titles[targetStatus];
+  document.getElementById("actionModalLabel").innerHTML = `${labels[targetStatus]} <span class="text-danger">*</span>`;
+  document.getElementById("actionModalPaymentId").textContent = paymentId;
+  document.getElementById("actionRemarks").value = "";
+  document.getElementById("actionRemarksError").classList.add("d-none");
+
+  const confirmBtn = document.getElementById("actionConfirmBtn");
+  confirmBtn.className = `btn ${btnClass[targetStatus]}`;
+  confirmBtn.textContent = titles[targetStatus];
+
+  new bootstrap.Modal(document.getElementById("actionModal")).show();
+}
+
+async function confirmAction() {
+  const remarks = document.getElementById("actionRemarks").value.trim();
+  if (!remarks) {
+    document.getElementById("actionRemarksError").classList.remove("d-none");
+    return;
+  }
+  if (!pendingAction) return;
+
+  const confirmBtn = document.getElementById("actionConfirmBtn");
+  confirmBtn.disabled = true;
+  showSpinner("Updating payment status...");
+
+  try {
+    const docRef = db.collection("payments").doc(pendingAction.docId);
+    const historyEntry = {
+      action: pendingAction.targetStatus,
+      byName: CURRENT_USER.name,
+      byRole: CURRENT_USER.role,
+      remarks,
+      timestamp: new Date().toISOString()
+    };
+
+    const update = {
+      status: pendingAction.targetStatus,
+      approvalHistory: firebase.firestore.FieldValue.arrayUnion(historyEntry),
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    };
+
+    if (pendingAction.targetStatus === "Approved") {
+      update.approvedBy = { uid: CURRENT_USER.uid, name: CURRENT_USER.name, role: CURRENT_USER.role };
+      update.approvedAt = firebase.firestore.FieldValue.serverTimestamp();
+    }
+
+    if (pendingAction.targetStatus === "Paid") {
+      update.paidBy = { uid: CURRENT_USER.uid, name: CURRENT_USER.name, role: CURRENT_USER.role };
+      update.paidAt = firebase.firestore.FieldValue.serverTimestamp();
+    }
+
+    await docRef.update(update);
+
+    const doc = await docRef.get();
+    const paymentId = doc.data().paymentId;
+
+    const typeMap = { "Approved": "Approval", "Rejected": "Rejection", "On Hold": "Hold", "Paid": "Payment Processed" };
+    await createNotification(typeMap[pendingAction.targetStatus],
+      `Payment ${paymentId} was marked ${pendingAction.targetStatus.toLowerCase()} by ${CURRENT_USER.name}.`, "Accounts");
+
+    hideSpinner();
+    confirmBtn.disabled = false;
+    bootstrap.Modal.getInstance(document.getElementById("actionModal")).hide();
+    showToast("Updated", `Payment ${paymentId} marked as ${pendingAction.targetStatus}.`, "success");
+    pendingAction = null;
+    loadApprovalTable();
+  } catch (err) {
+    console.error(err);
+    hideSpinner();
+    confirmBtn.disabled = false;
+    showToast("Error", "Could not update payment: " + err.message, "danger");
+  }
+}
