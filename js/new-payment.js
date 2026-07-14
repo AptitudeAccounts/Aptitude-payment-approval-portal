@@ -1,15 +1,19 @@
 /* =========================================================================
    new-payment.js
-   New Payment Request form: field validation, live supplier search
-   (scales to very large supplier lists — never preloads everything),
-   auto-save to the permanent supplier directory, Save Draft and Submit
-   for Approval workflows. (Attachment uploads are disabled — Firebase
-   Storage is not enabled on the free Spark plan.)
+   New Payment Request form: field validation, live supplier search,
+   auto-assigned sequential supplier codes, small embedded attachments
+   (base64 — no Firebase Storage required), edit-before-approval, delete,
+   Save Draft and Submit for Approval workflows.
    ========================================================================= */
 
-let editingPaymentDocId = null; // set when editing an existing Draft
+let editingPaymentDocId = null;
+let editingOriginalStatus = null;
 let supplierPickedFromList = false;
 let supplierSearchTimer = null;
+let attachedFiles = []; // { name, dataUrl, size, type }
+
+const MAX_FILE_SIZE = 700 * 1024; // 700 KB
+const MAX_FILES = 3;
 
 document.addEventListener("DOMContentLoaded", async () => {
   try {
@@ -36,6 +40,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   });
 
   setupSupplierAutocomplete();
+  setupFileUpload();
 
   document.getElementById("cancelBtn").addEventListener("click", () => {
     window.location.href = "history.html";
@@ -46,17 +51,73 @@ document.addEventListener("DOMContentLoaded", async () => {
     e.preventDefault();
     submitPayment("Submitted");
   });
+  document.getElementById("deletePaymentBtn").addEventListener("click", deleteCurrentPayment);
 
-  // Support editing an existing draft: new-payment.html?edit=<docId>
   const params = new URLSearchParams(window.location.search);
   const editId = params.get("edit");
   if (editId) await loadDraftForEdit(editId);
 });
 
 /* =========================================================================
-   Supplier live search — queries Firestore as the user types instead of
-   loading the whole supplier collection, so it stays fast even with
-   100,000+ suppliers.
+   File upload — embedded as base64 directly in the payment document
+   (no Firebase Storage needed on the free plan). Keep files small.
+   ========================================================================= */
+function setupFileUpload() {
+  const zone = document.getElementById("dropZoneFiles");
+  const input = document.getElementById("fileInput");
+
+  zone.addEventListener("click", () => input.click());
+  zone.addEventListener("dragover", (e) => { e.preventDefault(); zone.classList.add("dragover"); });
+  zone.addEventListener("dragleave", () => zone.classList.remove("dragover"));
+  zone.addEventListener("drop", (e) => {
+    e.preventDefault();
+    zone.classList.remove("dragover");
+    handleFiles(e.dataTransfer.files);
+  });
+  input.addEventListener("change", () => handleFiles(input.files));
+}
+
+function handleFiles(fileList) {
+  Array.from(fileList).forEach((file) => {
+    if (attachedFiles.length >= MAX_FILES) {
+      showToast("Limit Reached", `Maximum ${MAX_FILES} files per payment.`, "warning");
+      return;
+    }
+    if (file.size > MAX_FILE_SIZE) {
+      showToast("File Too Large", `"${file.name}" is over 700KB. Please compress or choose a smaller file.`, "danger");
+      return;
+    }
+    const allowed = ["application/pdf", "image/png", "image/jpeg", "image/jpg"];
+    if (!allowed.includes(file.type)) {
+      showToast("Unsupported File", `"${file.name}" must be PDF, PNG, or JPG.`, "danger");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      attachedFiles.push({ name: file.name, dataUrl: reader.result, size: file.size, type: file.type });
+      renderFileChips();
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+function renderFileChips() {
+  const chipsBox = document.getElementById("fileChips");
+  chipsBox.innerHTML = attachedFiles.map((f, i) => `
+    <span class="file-chip">
+      <i class="fa-regular fa-file"></i> ${escapeHtml(f.name)} (${Math.round(f.size / 1024)}KB)
+      <i class="fa-solid fa-xmark remove-file" data-index="${i}"></i>
+    </span>`).join("");
+  chipsBox.querySelectorAll(".remove-file").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      attachedFiles.splice(Number(btn.dataset.index), 1);
+      renderFileChips();
+    });
+  });
+}
+
+/* =========================================================================
+   Supplier live search
    ========================================================================= */
 function setupSupplierAutocomplete() {
   const nameInput = document.getElementById("supplierName");
@@ -66,6 +127,7 @@ function setupSupplierAutocomplete() {
 
   nameInput.addEventListener("input", () => {
     supplierPickedFromList = false;
+    codeInput.value = "";
     const term = nameInput.value.trim();
     clearTimeout(supplierSearchTimer);
 
@@ -101,7 +163,7 @@ function setupSupplierAutocomplete() {
           hint.classList.add("text-success");
           supplierPickedFromList = true;
         } else if (snap.empty) {
-          hint.textContent = "New supplier — it will be saved for future use.";
+          hint.textContent = "New supplier — a code will be auto-assigned on save.";
           hint.classList.remove("text-success");
         } else {
           hint.textContent = "Similar suppliers found below — select one, or keep typing to add new.";
@@ -145,7 +207,7 @@ function validateForm(targetStatus) {
   let valid = true;
 
   if (targetStatus === "Submitted") {
-    const required = ["supplierName", "supplierCode", "amount", "currency", "outlet",
+    const required = ["supplierName", "amount", "currency", "outlet",
       "purpose", "paymentType", "invoiceNumber", "invoiceDate", "requiredPaymentDate", "category"];
     required.forEach((id) => {
       const el = document.getElementById(id);
@@ -177,14 +239,10 @@ function validateForm(targetStatus) {
   return valid;
 }
 
-function supplierDocId(name) {
-  return name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") || "supplier";
-}
-
 async function saveSupplierToDirectory(name, code) {
   if (!name) return;
   try {
-    const id = supplierDocId(name);
+    const id = name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") || "supplier";
     await db.collection("suppliers").doc(id).set({
       name: name.trim(),
       nameLower: name.trim().toLowerCase(),
@@ -193,7 +251,6 @@ async function saveSupplierToDirectory(name, code) {
     }, { merge: true });
   } catch (err) {
     console.error("Could not save supplier to directory:", err);
-    // Non-fatal: the payment itself still saves even if this fails
   }
 }
 
@@ -211,6 +268,12 @@ async function submitPayment(targetStatus) {
 
   try {
     const data = collectFormData();
+
+    if (!supplierPickedFromList && !data.supplierCode && data.supplierName) {
+      data.supplierCode = await generateSupplierCode();
+      document.getElementById("supplierCode").value = data.supplierCode;
+    }
+
     let paymentId = document.getElementById("paymentIdField").dataset.rawId;
 
     let docRef;
@@ -226,17 +289,17 @@ async function submitPayment(targetStatus) {
       paymentId,
       ...data,
       status: targetStatus === "Submitted" ? "Pending Approval" : "Draft",
-      attachments: [],
+      attachments: attachedFiles,
       requestedBy: { uid: CURRENT_USER.uid, name: CURRENT_USER.name, email: CURRENT_USER.email },
       updatedAt: firebase.firestore.FieldValue.serverTimestamp()
     };
 
     if (editingPaymentDocId) {
       const historyEntry = {
-        action: targetStatus === "Submitted" ? "Submitted" : "Draft Updated",
+        action: targetStatus === "Submitted" ? (editingOriginalStatus === "Pending Approval" ? "Updated & Resubmitted" : "Submitted") : "Draft Updated",
         byName: CURRENT_USER.name,
         byRole: CURRENT_USER.role,
-        remarks: targetStatus === "Submitted" ? "Request submitted for approval." : "Draft updated.",
+        remarks: targetStatus === "Submitted" ? "Request updated and submitted for approval." : "Draft updated.",
         timestamp: new Date().toISOString()
       };
       payload.approvalHistory = firebase.firestore.FieldValue.arrayUnion(historyEntry);
@@ -253,12 +316,11 @@ async function submitPayment(targetStatus) {
       await docRef.set(payload);
     }
 
-    // Save/update this supplier in the permanent directory for future autocomplete
     await saveSupplierToDirectory(data.supplierName, data.supplierCode);
 
     if (targetStatus === "Submitted") {
-      await createNotification("New Request", `New payment request ${paymentId} submitted by ${CURRENT_USER.name}.`, "Administrator");
-      await createNotification("New Request", `New payment request ${paymentId} submitted by ${CURRENT_USER.name}.`, "Operations Manager");
+      await createNotification("New Request", `Payment request ${paymentId} submitted by ${CURRENT_USER.name}.`, "Administrator");
+      await createNotification("New Request", `Payment request ${paymentId} submitted by ${CURRENT_USER.name}.`, "Operations Manager");
     }
 
     hideSpinner();
@@ -273,22 +335,52 @@ async function submitPayment(targetStatus) {
   }
 }
 
+async function deleteCurrentPayment() {
+  if (!editingPaymentDocId) return;
+  if (!confirm("Delete this payment request permanently? This cannot be undone.")) return;
+
+  showSpinner("Deleting...");
+  try {
+    await db.collection("payments").doc(editingPaymentDocId).delete();
+    hideSpinner();
+    showToast("Deleted", "Payment request deleted.", "success");
+    setTimeout(() => { window.location.href = "history.html"; }, 800);
+  } catch (err) {
+    console.error(err);
+    hideSpinner();
+    showToast("Error", "Could not delete: " + err.message, "danger");
+  }
+}
+
 async function loadDraftForEdit(docId) {
-  showSpinner("Loading draft...");
+  showSpinner("Loading payment...");
   try {
     const doc = await db.collection("payments").doc(docId).get();
     if (!doc.exists) { hideSpinner(); return; }
     const p = doc.data();
-    if (p.status !== "Draft" || p.requestedBy.uid !== CURRENT_USER.uid) {
+
+    if (!p.requestedBy || p.requestedBy.uid !== CURRENT_USER.uid || !["Draft", "Pending Approval"].includes(p.status)) {
       hideSpinner();
-      showToast("Not Allowed", "Only your own drafts can be edited.", "warning");
+      showToast("Not Allowed", "This payment can no longer be edited (already actioned by an approver).", "warning");
+      window.location.href = "history.html";
       return;
     }
+
     editingPaymentDocId = docId;
+    editingOriginalStatus = p.status;
+
+    document.getElementById("deletePaymentBtn").classList.remove("d-none");
+
+    if (p.status === "Pending Approval") {
+      document.getElementById("saveDraftBtn").classList.add("d-none");
+      document.getElementById("submitBtn").innerHTML = '<i class="fa-solid fa-arrows-rotate me-1"></i>Update & Resubmit';
+    }
+
     document.getElementById("paymentIdField").value = p.paymentId;
     document.getElementById("paymentIdField").dataset.rawId = p.paymentId;
     document.getElementById("supplierName").value = p.supplierName || "";
     document.getElementById("supplierCode").value = p.supplierCode || "";
+    if (p.supplierCode) supplierPickedFromList = true;
     document.getElementById("amount").value = p.amount || "";
     document.getElementById("currency").value = p.currency || "AED";
 
@@ -312,10 +404,13 @@ async function loadDraftForEdit(docId) {
     document.getElementById("description").value = p.description || "";
     document.getElementById("remarks").value = p.remarks || "";
 
+    attachedFiles = (p.attachments || []).filter((a) => a.dataUrl);
+    renderFileChips();
+
     hideSpinner();
   } catch (err) {
     console.error(err);
     hideSpinner();
-    showToast("Error", "Could not load draft.", "danger");
+    showToast("Error", "Could not load payment.", "danger");
   }
 }
