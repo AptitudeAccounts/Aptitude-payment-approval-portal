@@ -1,9 +1,8 @@
 /* =========================================================================
    suppliers.js
    Supplier Directory: live prefix search (scales to very large supplier
-   lists without loading everything into the browser), and a payment
-   history modal per supplier computed on demand from actual payment
-   records (always accurate, no separate counters to keep in sync).
+   lists), a payment history modal computed on demand from actual payment
+   records, and an edit modal to correct supplier name/code/contact.
    ========================================================================= */
 
 let supplierSearchTimer = null;
@@ -23,6 +22,8 @@ document.addEventListener("DOMContentLoaded", async () => {
     supplierSearchTimer = setTimeout(() => loadSuppliers(searchInput.value.trim()), 300);
   });
 
+  document.getElementById("saveSupplierEditBtn").addEventListener("click", saveSupplierEdit);
+
   await loadSuppliers("");
 });
 
@@ -37,8 +38,6 @@ async function loadSuppliers(term) {
     const termLower = term.toLowerCase();
 
     if (termLower) {
-      // Prefix search: works efficiently no matter how large the collection grows,
-      // since Firestore only returns matching documents, never the whole list.
       query = db.collection("suppliers")
         .where("nameLower", ">=", termLower)
         .where("nameLower", "<=", termLower + "\uf8ff")
@@ -68,6 +67,7 @@ async function loadSuppliers(term) {
           <td>${escapeHtml(s.contact || "-")}</td>
           <td>${formatDate(s.updatedAt || s.createdAt)}</td>
           <td>
+            <button class="btn-icon-action" title="Edit" onclick="openSupplierEdit('${doc.id}','${escapeHtml(s.name).replace(/'/g, "\\'")}','${escapeHtml(s.code || "").replace(/'/g, "\\'")}','${escapeHtml(s.contact || "").replace(/'/g, "\\'")}')"><i class="fa-solid fa-pen"></i></button>
             <button class="btn btn-sm btn-outline-navy" onclick="openSupplierHistory('${escapeHtml(s.name).replace(/'/g, "\\'")}')">
               <i class="fa-solid fa-clock-rotate-left me-1"></i>View History
             </button>
@@ -78,6 +78,46 @@ async function loadSuppliers(term) {
   } catch (err) {
     console.error(err);
     showToast("Error", "Could not load suppliers: " + err.message, "danger");
+  }
+}
+
+function openSupplierEdit(docId, name, code, contact) {
+  document.getElementById("editSupplierDocId").value = docId;
+  document.getElementById("editSupplierName").value = name;
+  document.getElementById("editSupplierCode").value = code;
+  document.getElementById("editSupplierContact").value = contact;
+  new bootstrap.Modal(document.getElementById("supplierEditModal")).show();
+}
+
+async function saveSupplierEdit() {
+  const docId = document.getElementById("editSupplierDocId").value;
+  const name = document.getElementById("editSupplierName").value.trim();
+  const code = document.getElementById("editSupplierCode").value.trim();
+  const contact = document.getElementById("editSupplierContact").value.trim();
+
+  if (!name) {
+    showToast("Missing Information", "Supplier name is required.", "warning");
+    return;
+  }
+
+  showSpinner("Saving changes...");
+  try {
+    await db.collection("suppliers").doc(docId).set({
+      name,
+      nameLower: name.toLowerCase(),
+      code,
+      contact,
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    }, { merge: true });
+
+    hideSpinner();
+    bootstrap.Modal.getInstance(document.getElementById("supplierEditModal")).hide();
+    showToast("Saved", "Supplier updated successfully.", "success");
+    loadSuppliers(document.getElementById("supplierSearchInput").value.trim());
+  } catch (err) {
+    console.error(err);
+    hideSpinner();
+    showToast("Error", "Could not update supplier: " + err.message, "danger");
   }
 }
 
@@ -97,17 +137,17 @@ async function openSupplierHistory(supplierName) {
     snap.forEach((doc) => payments.push({ id: doc.id, ...doc.data() }));
 
     const totalPaid = payments.filter((p) => p.status === "Paid").reduce((s, p) => s + Number(p.amount || 0), 0);
-    const pendingAmount = payments.filter((p) => p.status === "Pending Approval" || p.status === "Submitted").reduce((s, p) => s + Number(p.amount || 0), 0);
-    const avgPayment = payments.length ? payments.reduce((s, p) => s + Number(p.amount || 0), 0) / payments.length : 0;
-    const sorted = payments.filter((p) => p.createdAt).sort((a, b) => b.createdAt.toDate() - a.createdAt.toDate());
-    const last = sorted[0];
+    const pendingAmount = payments.filter((p) => p.status === "Pending Approval" || p.status === "Submitted" || p.status === "On Hold").reduce((s, p) => s + Number(p.amount || 0), 0);
+    const paidCount = payments.filter((p) => p.status === "Paid").length;
+    const avgPayment = paidCount ? totalPaid / paidCount : 0;
+    const lastPaid = payments.filter((p) => p.status === "Paid" && p.paidAt).sort((a, b) => b.paidAt.toDate() - a.paidAt.toDate())[0];
 
     const kpis = [
       { label: "Total Requests", value: payments.length },
       { label: "Total Paid", value: formatCurrency(totalPaid, "AED") },
       { label: "Pending Amount", value: formatCurrency(pendingAmount, "AED") },
       { label: "Average Payment", value: formatCurrency(avgPayment, "AED") },
-      { label: "Last Payment", value: last ? formatDate(last.createdAt) : "-" }
+      { label: "Last Payment", value: lastPaid ? formatDate(lastPaid.paidAt) : "-" }
     ];
     document.getElementById("supplierHistoryKpiRow").innerHTML = kpis.map((k) => `
       <div class="col-6 col-md" style="flex:1;">
@@ -136,6 +176,7 @@ async function openSupplierHistory(supplierName) {
       options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, grid: { color: "#EEF1F6" } }, x: { grid: { display: false } } } }
     });
 
+    const sorted = payments.filter((p) => p.createdAt).sort((a, b) => b.createdAt.toDate() - a.createdAt.toDate());
     document.getElementById("supplierHistoryTableBody").innerHTML = sorted.length
       ? sorted.map((p) => `
         <tr>
