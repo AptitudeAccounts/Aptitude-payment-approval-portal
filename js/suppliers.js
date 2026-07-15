@@ -77,6 +77,8 @@ async function loadSuppliers(term) {
     body.innerHTML = html;
   } catch (err) {
     console.error(err);
+    document.getElementById("suppliersTableBody").innerHTML =
+      `<tr><td colspan="5" class="text-danger text-center py-4">Error: ${escapeHtml(err.message)} ${err.code ? "(" + err.code + ")" : ""}</td></tr>`;
     showToast("Error", "Could not load suppliers: " + err.message, "danger");
   }
 }
