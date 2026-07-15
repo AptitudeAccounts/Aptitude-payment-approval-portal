@@ -1,7 +1,8 @@
 /* =========================================================================
    reports.js
    Reports & Analytics: date/status/outlet/supplier filters, six charts,
-   top suppliers table, and a per-supplier profile modal.
+   top suppliers table (with Pending count+amount and Total Paid based on
+   payments actually marked Paid), and a per-supplier profile modal.
    ========================================================================= */
 
 let reportAllPayments = [];
@@ -141,7 +142,8 @@ function renderMonthlyChart() {
 }
 
 function renderOutletChart() {
-     const outlets = ["Louvre", "ARC", "S45 Khalidya", "DGE", "Al Qana", "Al Nahyan"];  const data = outlets.map((o) => reportFiltered.filter((p) => p.outlet === o).reduce((s, p) => s + Number(p.amount || 0), 0));
+  const outlets = ["Louvre", "ARC", "S45 Khalidya", "DGE", "Al Qana", "Al Nahyan"];
+  const data = outlets.map((o) => reportFiltered.filter((p) => p.outlet === o).reduce((s, p) => s + Number(p.amount || 0), 0));
   destroyChart("outlet");
   chartInstances.outlet = new Chart(document.getElementById("outletChart"), {
     type: "bar",
@@ -198,31 +200,43 @@ function renderTopSuppliers() {
   const bySupplier = {};
   reportFiltered.forEach((p) => {
     const key = p.supplierName || "Unknown";
-    if (!bySupplier[key]) bySupplier[key] = { name: key, code: p.supplierCode, count: 0, paid: 0, payments: [] };
+    if (!bySupplier[key]) bySupplier[key] = {
+      name: key, code: p.supplierCode, count: 0,
+      pendingCount: 0, pendingAmount: 0,
+      paidAmount: 0, paidCount: 0, payments: []
+    };
     bySupplier[key].count++;
-    if (p.status === "Paid") bySupplier[key].paid += Number(p.amount || 0);
+    if (p.status === "Pending Approval" || p.status === "Submitted" || p.status === "On Hold") {
+      bySupplier[key].pendingCount++;
+      bySupplier[key].pendingAmount += Number(p.amount || 0);
+    }
+    if (p.status === "Paid") {
+      bySupplier[key].paidAmount += Number(p.amount || 0);
+      bySupplier[key].paidCount++;
+    }
     bySupplier[key].payments.push(p);
   });
 
-  const list = Object.values(bySupplier).sort((a, b) => b.paid - a.paid).slice(0, 10);
+  const list = Object.values(bySupplier).sort((a, b) => b.paidAmount - a.paidAmount).slice(0, 10);
   const body = document.getElementById("topSuppliersBody");
   if (!list.length) {
-    body.innerHTML = `<tr><td colspan="7" class="text-center text-muted-soft py-4">No supplier data for this filter.</td></tr>`;
+    body.innerHTML = `<tr><td colspan="8" class="text-center text-muted-soft py-4">No supplier data for this filter.</td></tr>`;
     return;
   }
   body.innerHTML = list.map((s, i) => {
-    const avg = s.count ? s.paid / s.count : 0;
-    const last = s.payments
-      .filter((p) => p.createdAt)
-      .sort((a, b) => b.createdAt.toDate() - a.createdAt.toDate())[0];
+    const avg = s.paidCount ? s.paidAmount / s.paidCount : 0;
+    const lastPaid = s.payments
+      .filter((p) => p.status === "Paid" && p.paidAt)
+      .sort((a, b) => b.paidAt.toDate() - a.paidAt.toDate())[0];
     return `
     <tr>
       <td>${i + 1}</td>
       <td><a href="#" class="supplier-link fw-semibold" data-supplier="${escapeHtml(s.name)}">${escapeHtml(s.name)}</a></td>
       <td>${s.count}</td>
-      <td>${formatCurrency(s.paid, "AED")}</td>
+      <td>${s.pendingCount} &middot; ${formatCurrency(s.pendingAmount, "AED")}</td>
+      <td>${formatCurrency(s.paidAmount, "AED")}</td>
       <td>${formatCurrency(avg, "AED")}</td>
-      <td>${last ? formatDate(last.createdAt) : "-"}</td>
+      <td>${lastPaid ? formatDate(lastPaid.paidAt) : "-"}</td>
       <td><button class="btn-icon-action" onclick="openSupplierProfile('${escapeHtml(s.name)}')"><i class="fa-solid fa-arrow-up-right-from-square"></i></button></td>
     </tr>`;
   }).join("");
@@ -240,16 +254,17 @@ function openSupplierProfile(supplierName) {
   document.getElementById("supplierModalName").textContent = supplierName;
 
   const totalPaid = payments.filter((p) => p.status === "Paid").reduce((s, p) => s + Number(p.amount || 0), 0);
-  const pendingAmount = payments.filter((p) => p.status === "Pending Approval" || p.status === "Submitted").reduce((s, p) => s + Number(p.amount || 0), 0);
-  const avgPayment = payments.length ? payments.reduce((s, p) => s + Number(p.amount || 0), 0) / payments.length : 0;
-  const last = payments.filter((p) => p.createdAt).sort((a, b) => b.createdAt.toDate() - a.createdAt.toDate())[0];
+  const pendingAmount = payments.filter((p) => p.status === "Pending Approval" || p.status === "Submitted" || p.status === "On Hold").reduce((s, p) => s + Number(p.amount || 0), 0);
+  const paidCount = payments.filter((p) => p.status === "Paid").length;
+  const avgPayment = paidCount ? totalPaid / paidCount : 0;
+  const lastPaid = payments.filter((p) => p.status === "Paid" && p.paidAt).sort((a, b) => b.paidAt.toDate() - a.paidAt.toDate())[0];
 
   const kpis = [
     { label: "Total Paid", value: formatCurrency(totalPaid, "AED") },
     { label: "Total Requests", value: payments.length },
     { label: "Pending Amount", value: formatCurrency(pendingAmount, "AED") },
     { label: "Average Payment", value: formatCurrency(avgPayment, "AED") },
-    { label: "Last Payment", value: last ? formatDate(last.createdAt) : "-" }
+    { label: "Last Payment", value: lastPaid ? formatDate(lastPaid.paidAt) : "-" }
   ];
   document.getElementById("supplierKpiRow").innerHTML = kpis.map((k) => `
     <div class="col-6 col-md-2dot4" style="flex:1 0 19%;max-width:19%;">
