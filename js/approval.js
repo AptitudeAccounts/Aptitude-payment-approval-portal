@@ -1,8 +1,9 @@
 /* =========================================================================
    approval.js
    Approvals screen for Admin & Operations Manager roles: status tabs,
-   table with view/approve/hold/reject/print actions, and remarks-required
-   modal workflow that appends a full audit trail entry to each payment.
+   table with view/approve/hold/reject/mark-paid/print actions, and a
+   remarks-required modal workflow that appends a full audit trail entry
+   to each payment.
    ========================================================================= */
 
 let currentStatusFilter = "Pending Approval";
@@ -15,7 +16,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   } catch (e) {
     return;
   }
-  renderShell("approval.html", "Approvals", "Review, approve, hold, or reject payment requests");
+  renderShell("approval.html", "Approvals", "Review, approve, hold, reject, or mark payments as paid");
 
   document.querySelectorAll("#statusTabs .nav-link").forEach((tab) => {
     tab.addEventListener("click", (e) => {
@@ -76,6 +77,9 @@ async function loadApprovalTable() {
           <button class="btn-icon-action hold" title="Hold" onclick="openActionModal('${p.id}','${p.paymentId}','On Hold')"><i class="fa-solid fa-hand"></i></button>
           <button class="btn-icon-action reject" title="Reject" onclick="openActionModal('${p.id}','${p.paymentId}','Rejected')"><i class="fa-solid fa-xmark"></i></button>
           ` : ""}
+          ${currentStatusFilter === "Approved" ? `
+          <button class="btn-icon-action approve" title="Mark as Paid" onclick="openActionModal('${p.id}','${p.paymentId}','Paid')"><i class="fa-solid fa-sack-dollar"></i></button>
+          ` : ""}
           <button class="btn-icon-action" title="Print" onclick='exportPaymentDetailPdf(${JSON.stringify(p).replace(/'/g, "&#39;")})'><i class="fa-solid fa-print"></i></button>
         </td>
       </tr>`).join("");
@@ -87,9 +91,9 @@ async function loadApprovalTable() {
 
 function openActionModal(docId, paymentId, targetStatus) {
   pendingAction = { docId, targetStatus };
-  const titles = { "Approved": "Approve Payment", "Rejected": "Reject Payment", "On Hold": "Hold Payment" };
-  const labels = { "Approved": "Approval Remarks", "Rejected": "Rejection Reason", "On Hold": "Hold Remarks" };
-  const btnClass = { "Approved": "btn-teal", "Rejected": "btn-danger", "On Hold": "btn-navy" };
+  const titles = { "Approved": "Approve Payment", "Rejected": "Reject Payment", "On Hold": "Hold Payment", "Paid": "Mark as Paid" };
+  const labels = { "Approved": "Approval Remarks", "Rejected": "Rejection Reason", "On Hold": "Hold Remarks", "Paid": "Payment Remarks" };
+  const btnClass = { "Approved": "btn-teal", "Rejected": "btn-danger", "On Hold": "btn-navy", "Paid": "btn-teal" };
 
   document.getElementById("actionModalTitle").textContent = titles[targetStatus];
   document.getElementById("actionModalLabel").innerHTML = `${labels[targetStatus]} <span class="text-danger">*</span>`;
@@ -137,15 +141,19 @@ async function confirmAction() {
       update.approvedAt = firebase.firestore.FieldValue.serverTimestamp();
     }
 
+    if (pendingAction.targetStatus === "Paid") {
+      update.paidBy = { uid: CURRENT_USER.uid, name: CURRENT_USER.name, role: CURRENT_USER.role };
+      update.paidAt = firebase.firestore.FieldValue.serverTimestamp();
+    }
+
     await docRef.update(update);
 
     const doc = await docRef.get();
     const paymentId = doc.data().paymentId;
-    const requesterUid = doc.data().requestedBy ? doc.data().requestedBy.uid : null;
 
-    const typeMap = { "Approved": "Approval", "Rejected": "Rejection", "On Hold": "Hold" };
+    const typeMap = { "Approved": "Approval", "Rejected": "Rejection", "On Hold": "Hold", "Paid": "Payment Processed" };
     await createNotification(typeMap[pendingAction.targetStatus],
-      `Payment ${paymentId} was ${pendingAction.targetStatus.toLowerCase()} by ${CURRENT_USER.name}.`, "Accounts");
+      `Payment ${paymentId} was marked ${pendingAction.targetStatus.toLowerCase()} by ${CURRENT_USER.name}.`, "Accounts");
 
     hideSpinner();
     confirmBtn.disabled = false;
