@@ -2,12 +2,6 @@ rules_version = '2';
 
 // =============================================================================
 // Aptitude Payment Approval Portal — Firestore Security Rules
-//
-// Roles are derived from the signed-in user's email address, matching the
-// ROLE_MAP in js/firebase/firebase-config.js:
-//   accounts@aptitude.ae     -> Accounts
-//   admin@aptitude.ae        -> Administrator
-//   operations@aptitude.ae   -> Operations Manager
 // =============================================================================
 
 service cloud.firestore {
@@ -41,9 +35,6 @@ service cloud.firestore {
       return isAccounts() || isApprover();
     }
 
-    // ---------------------------------------------------------------------
-    // payments
-    // ---------------------------------------------------------------------
     match /payments/{paymentId} {
       allow read: if isAuthorizedUser() &&
         (isApprover() || resource.data.requestedBy.uid == request.auth.uid);
@@ -52,20 +43,18 @@ service cloud.firestore {
         request.resource.data.requestedBy.uid == request.auth.uid &&
         request.resource.data.status in ['Draft', 'Pending Approval'];
 
-      // Accounts can update their OWN request while it is still Draft or
-      // Pending Approval (i.e. before an approver has actioned it).
+      // Admin can add historical/backdated payments directly as Paid
+      allow create: if isAdmin() && request.resource.data.status == 'Paid';
+
       allow update: if isAccounts() &&
         resource.data.requestedBy.uid == request.auth.uid &&
         resource.data.status in ['Draft', 'Pending Approval'] &&
         request.resource.data.status in ['Draft', 'Pending Approval'];
 
-      // Admin / Operations can transition status (approve / reject / hold / mark paid).
       allow update: if isApprover() &&
         request.resource.data.status in
           ['Pending Approval', 'Approved', 'Rejected', 'On Hold', 'Paid'];
 
-      // Accounts can delete their OWN request while Draft or Pending Approval.
-      // Admin can delete any request.
       allow delete: if isAdmin() ||
         (isAccounts() &&
           resource.data.requestedBy.uid == request.auth.uid &&
