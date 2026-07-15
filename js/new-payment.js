@@ -10,9 +10,9 @@ let editingPaymentDocId = null;
 let editingOriginalStatus = null;
 let supplierPickedFromList = false;
 let supplierSearchTimer = null;
-let attachedFiles = []; // { name, dataUrl, size, type }
+let attachedFiles = [];
 
-const MAX_FILE_SIZE = 700 * 1024; // 700 KB
+const MAX_FILE_SIZE = 700 * 1024;
 const MAX_FILES = 3;
 
 document.addEventListener("DOMContentLoaded", async () => {
@@ -58,10 +58,6 @@ document.addEventListener("DOMContentLoaded", async () => {
   if (editId) await loadDraftForEdit(editId);
 });
 
-/* =========================================================================
-   File upload — embedded as base64 directly in the payment document
-   (no Firebase Storage needed on the free plan). Keep files small.
-   ========================================================================= */
 function setupFileUpload() {
   const zone = document.getElementById("dropZoneFiles");
   const input = document.getElementById("fileInput");
@@ -116,9 +112,6 @@ function renderFileChips() {
   });
 }
 
-/* =========================================================================
-   Supplier live search
-   ========================================================================= */
 function setupSupplierAutocomplete() {
   const nameInput = document.getElementById("supplierName");
   const codeInput = document.getElementById("supplierCode");
