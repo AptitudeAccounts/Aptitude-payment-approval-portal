@@ -22,9 +22,7 @@
         <div class="row g-3 align-items-end">
           <div class="col-md-8">
             <label class="form-label">Search Suppliers</label>
-            <div class="input-icon-wrap" style="position:relative;">
-              <input type="text" class="form-control" id="supplierSearchInput" placeholder="Start typing a supplier name..." autocomplete="off">
-            </div>
+            <input type="text" class="form-control" id="supplierSearchInput" placeholder="Start typing a supplier name..." autocomplete="off">
           </div>
           <div class="col-md-4 text-md-end">
             <span class="text-muted-soft small" id="supplierCountLabel"></span>
@@ -81,6 +79,31 @@
             <tbody id="supplierHistoryTableBody"></tbody>
           </table>
         </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Edit Supplier Modal -->
+<div class="modal fade" id="supplierEditModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content rounded-xl">
+      <div class="modal-header border-0">
+        <h5 class="modal-title">Edit Supplier</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="editSupplierDocId">
+        <label class="form-label">Supplier Name <span class="text-danger">*</span></label>
+        <input type="text" class="form-control mb-3" id="editSupplierName">
+        <label class="form-label">Supplier Code</label>
+        <input type="text" class="form-control mb-3" id="editSupplierCode">
+        <label class="form-label">Contact (email/phone)</label>
+        <input type="text" class="form-control" id="editSupplierContact">
+      </div>
+      <div class="modal-footer border-0">
+        <button class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button class="btn btn-navy" id="saveSupplierEditBtn">Save Changes</button>
       </div>
     </div>
   </div>
